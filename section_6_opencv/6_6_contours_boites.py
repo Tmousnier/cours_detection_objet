@@ -54,26 +54,37 @@ for contour in contours_bruts:
 print(f"Boites brutes (findContours) : {len(contours_bruts)}")
 
 # ── 4. GrabCut — boîte englobante précise autour de l'animal ────────────────
-# GrabCut sépare le sujet du fond en utilisant les couleurs (plus fiable
-# que le seuillage simple sur des images à fond complexe).
-h_img, w_img = img.shape[:2]
-margin_x = int(w_img * 0.04)
-margin_y = int(h_img * 0.04)
+# OPTIMISATION VITESSE :
+#   1) On réduit l'image à 25% pour GrabCut  → ~16x moins de pixels à traiter
+#   2) On réduit les itérations de 5 → 3      → ~40% plus rapide
+#   3) On remet les coordonnées à l'échelle originale pour l'affichage
 
-# Rectangle initial (x, y, largeur, hauteur) = zone probable de l'avant-plan
-rect_gc   = (margin_x, margin_y, w_img - 2 * margin_x, h_img - 2 * margin_y)
-mask_gc   = np.zeros((h_img, w_img), np.uint8)
+SCALE = 0.25   # ← ajuster entre 0.20 et 0.50 selon qualité/vitesse souhaitée
+ITER  = 3      # ← 3 itérations suffisent dans la plupart des cas
+
+img_small = cv2.resize(img, None, fx=SCALE, fy=SCALE, interpolation=cv2.INTER_AREA)
+h_small, w_small = img_small.shape[:2]
+
+margin_x = int(w_small * 0.04)
+margin_y = int(h_small * 0.04)
+rect_gc   = (margin_x, margin_y, w_small - 2 * margin_x, h_small - 2 * margin_y)
+
+mask_gc   = np.zeros((h_small, w_small), np.uint8)
 bgd_model = np.zeros((1, 65), np.float64)
 fgd_model = np.zeros((1, 65), np.float64)
 
-cv2.grabCut(img, mask_gc, rect_gc, bgd_model, fgd_model, 5, cv2.GC_INIT_WITH_RECT)
+cv2.grabCut(img_small, mask_gc, rect_gc, bgd_model, fgd_model, ITER, cv2.GC_INIT_WITH_RECT)
 
-# Masque binaire : 0/2 = fond → 0, 1/3 = avant-plan → 255
-masque_fg = np.where((mask_gc == 2) | (mask_gc == 0), 0, 255).astype(np.uint8)
+# Masque binaire sur l'image réduite
+masque_small = np.where((mask_gc == 2) | (mask_gc == 0), 0, 255).astype(np.uint8)
 
-# Trouver les contours sur le masque GrabCut
+# Reprojeter le masque à la taille originale
+h_img, w_img = img.shape[:2]
+masque_fg = cv2.resize(masque_small, (w_img, h_img), interpolation=cv2.INTER_NEAREST)
+
+# Trouver les contours sur le masque reprojeté
 contours_gc, _ = cv2.findContours(masque_fg, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-print(f"Nombre de régions GrabCut : {len(contours_gc)}")
+print(f"Nombre de regions GrabCut : {len(contours_gc)}")
 
 # Garder les 5 plus grandes régions et fusionner en une seule boîte
 contours_significatifs = sorted(contours_gc, key=cv2.contourArea, reverse=True)[:5]
