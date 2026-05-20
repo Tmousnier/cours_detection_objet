@@ -1,16 +1,21 @@
+# -*- coding: utf-8 -*-
 """
 ====================================================
- Section 7 — IoU (Intersection over Union)
+ Section 7 - IoU (Intersection over Union)
 ====================================================
-L'IoU mesure la qualité de localisation d'une boîte prédite
-par rapport à la boîte de référence (ground truth).
+L'IoU mesure la qualite de localisation d'une boite predite
+par rapport a la boite de reference (ground truth).
 
 Formule :
     IoU = Aire(intersection) / Aire(union)
 
 Valeur entre 0 (aucun overlap) et 1 (superposition parfaite).
 
-Basé sur : https://github.com/yugmerabtene/nexa-computer-vision/blob/main/JOUR-01.md
+Utilise les 2 vraies photos du chien :
+  - Photo 1 : Harry_bebe.jpeg    -> boite de reference (GT)
+  - Photo 2 : Harry_bebe (1).png -> boite predite
+
+Base sur : https://github.com/yugmerabtene/nexa-computer-vision/blob/main/JOUR-01.md
 """
 
 import os
@@ -22,121 +27,175 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-# ── Chemins dynamiques ──────────────────────────────────────────────────────
-BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUTPUT_DIR = os.path.join(BASE_DIR, "outputs")
+# -- Chemins dynamiques -------------------------------------------------------
+BASE_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+IMAGE_PATH1 = os.path.join(BASE_DIR, "Image", "Harry_bebe.jpeg")
+IMAGE_PATH2 = os.path.join(BASE_DIR, "Image", "Harry_bebe (1).png")
+OUTPUT_DIR  = os.path.join(BASE_DIR, "outputs")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# ═══════════════════════════════════════════════════════════════════════════
-# 1. FONCTION IoU
-# ═══════════════════════════════════════════════════════════════════════════
+
+# =============================================================================
+# UTILITAIRES
+# =============================================================================
+def imread_safe(path):
+    """Lit une image meme si le chemin contient des espaces (Windows)."""
+    arr = np.fromfile(path, dtype=np.uint8)
+    return cv2.imdecode(arr, cv2.IMREAD_COLOR)
+
+
 def iou(box_a, box_b):
     """
-    Calcule le score IoU entre deux boîtes.
-    Format des boîtes : (x1, y1, x2, y2)
-      - (x1, y1) = coin supérieur gauche
-      - (x2, y2) = coin inférieur droit
+    Calcule le score IoU entre deux boites.
+    Format : (x1, y1, x2, y2)
 
-    Étapes :
-      1) Calculer les coordonnées de l'intersection
-      2) Vérifier qu'elle est valide (non nulle)
-      3) Calculer les aires et appliquer la formule
+    Etapes :
+      1) Coordonnees de l'intersection
+      2) Verification de la validite
+      3) Aires et formule IoU
     """
-    # Étape 1 — Coordonnées de l'intersection
     x_gauche = max(box_a[0], box_b[0])
     y_haut   = max(box_a[1], box_b[1])
     x_droite = min(box_a[2], box_b[2])
     y_bas    = min(box_a[3], box_b[3])
 
-    # Étape 2 — Pas d'intersection si les boîtes ne se chevauchent pas
     if x_droite <= x_gauche or y_bas <= y_haut:
         return 0.0
 
-    # Étape 3 — Aires
     aire_inter = (x_droite - x_gauche) * (y_bas - y_haut)
     aire_a     = (box_a[2] - box_a[0]) * (box_a[3] - box_a[1])
     aire_b     = (box_b[2] - box_b[0]) * (box_b[3] - box_b[1])
     aire_union = aire_a + aire_b - aire_inter
-
     return aire_inter / aire_union
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# 2. EXEMPLE NUMÉRIQUE (issu du cours)
-# ═══════════════════════════════════════════════════════════════════════════
-box_gt   = (40, 60, 181, 191)   # Boîte de référence (ground truth)
-box_pred = (52, 60, 192, 191)   # Boîte prédite (décalage de 12 px)
+def grabcut_bbox(img, scale=0.25, iterations=3):
+    """
+    Extrait la boite englobante du sujet via GrabCut.
+    Travaille sur une image reduite (scale) pour la vitesse.
+    Retourne (x1, y1, x2, y2) a l'echelle originale.
+    """
+    h_orig, w_orig = img.shape[:2]
+    img_small = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    h_s, w_s  = img_small.shape[:2]
 
+    margin_x = max(1, int(w_s * 0.04))
+    margin_y = max(1, int(h_s * 0.04))
+    rect_gc  = (margin_x, margin_y, w_s - 2 * margin_x, h_s - 2 * margin_y)
+
+    mask      = np.zeros((h_s, w_s), np.uint8)
+    bgd_model = np.zeros((1, 65), np.float64)
+    fgd_model = np.zeros((1, 65), np.float64)
+
+    cv2.grabCut(img_small, mask, rect_gc, bgd_model, fgd_model, iterations, cv2.GC_INIT_WITH_RECT)
+
+    mask_fg = np.where((mask == 2) | (mask == 0), 0, 255).astype(np.uint8)
+    # Reprojeter a la taille originale
+    mask_fg = cv2.resize(mask_fg, (w_orig, h_orig), interpolation=cv2.INTER_NEAREST)
+
+    contours, _ = cv2.findContours(mask_fg, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return (0, 0, w_orig, h_orig)
+
+    top5 = sorted(contours, key=cv2.contourArea, reverse=True)[:5]
+    x1 = min(cv2.boundingRect(c)[0] for c in top5)
+    y1 = min(cv2.boundingRect(c)[1] for c in top5)
+    x2 = max(cv2.boundingRect(c)[0] + cv2.boundingRect(c)[2] for c in top5)
+    y2 = max(cv2.boundingRect(c)[1] + cv2.boundingRect(c)[3] for c in top5)
+    return (x1, y1, x2, y2)
+
+
+# =============================================================================
+# 1. CHARGEMENT DES IMAGES
+# =============================================================================
+print("=" * 55)
+print("  Chargement des images")
+print("=" * 55)
+
+img1 = imread_safe(IMAGE_PATH1)
+img2 = imread_safe(IMAGE_PATH2)
+
+if img1 is None: raise FileNotFoundError(f"Image introuvable : {IMAGE_PATH1}")
+if img2 is None: raise FileNotFoundError(f"Image introuvable : {IMAGE_PATH2}")
+
+# Aligner les tailles
+img2 = cv2.resize(img2, (img1.shape[1], img1.shape[0]), interpolation=cv2.INTER_AREA)
+
+print(f"  Photo 1 : {img1.shape}  -- {os.path.basename(IMAGE_PATH1)}")
+print(f"  Photo 2 : {img2.shape}  -- {os.path.basename(IMAGE_PATH2)}")
+
+
+# =============================================================================
+# 2. EXTRACTION DES BOITES PAR GRABCUT
+# =============================================================================
+print("\n" + "=" * 55)
+print("  Extraction des boites (GrabCut)")
+print("=" * 55)
+
+print("  Traitement photo 1...")
+box_gt   = grabcut_bbox(img1)   # boite de reference (GT)
+print(f"  Boite GT   (photo 1) : {box_gt}")
+
+print("  Traitement photo 2...")
+box_pred = grabcut_bbox(img2)   # boite predite
+print(f"  Boite pred (photo 2) : {box_pred}")
+
+
+# =============================================================================
+# 3. CALCUL IoU
+# =============================================================================
 score = iou(box_pred, box_gt)
 
-print("=" * 50)
-print("  Calcul IoU — Exemple numérique")
-print("=" * 50)
-print(f"  Boîte GT   : {box_gt}")
-print(f"  Boîte pred : {box_pred}")
-print(f"  Aire GT    : {(box_gt[2]-box_gt[0]) * (box_gt[3]-box_gt[1])} px²")
-print(f"  Aire pred  : {(box_pred[2]-box_pred[0]) * (box_pred[3]-box_pred[1])} px²")
-print(f"  IoU        : {score:.3f}")
-print("=" * 50)
+print("\n" + "=" * 55)
+print("  Resultat IoU")
+print("=" * 55)
 
-# Interprétation
-if score >= 0.8:
-    niveau = "Excellente localisation"
-elif score >= 0.5:
-    niveau = "Bonne localisation"
-elif score > 0.0:
-    niveau = "Localisation partielle"
-else:
-    niveau = "Aucun overlap"
-print(f"  Interpretation : {niveau}")
+aire_gt   = (box_gt[2]   - box_gt[0])   * (box_gt[3]   - box_gt[1])
+aire_pred = (box_pred[2] - box_pred[0]) * (box_pred[3] - box_pred[1])
+print(f"  Aire GT   : {aire_gt}  px2")
+print(f"  Aire pred : {aire_pred}  px2")
+print(f"  IoU       : {score:.3f}")
+
+if   score >= 0.8: niveau = "Excellente localisation"
+elif score >= 0.5: niveau = "Bonne localisation"
+elif score  > 0.0: niveau = "Localisation partielle"
+else:              niveau = "Aucun overlap"
+print(f"  -> {niveau}")
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# 3. VISUALISATION DE L'IoU
-# ═══════════════════════════════════════════════════════════════════════════
+# =============================================================================
+# 4. VISUALISATION IoU (fonction generique)
+# =============================================================================
 def visualiser_iou(box_gt, box_pred, score, ax, titre=""):
-    """Dessine les deux boîtes et leur intersection sur un axe matplotlib."""
-    # Zone totale à afficher
-    x_min_view = min(box_gt[0], box_pred[0]) - 15
-    y_min_view = min(box_gt[1], box_pred[1]) - 15
-    x_max_view = max(box_gt[2], box_pred[2]) + 15
-    y_max_view = max(box_gt[3], box_pred[3]) + 15
+    """Dessine les deux boites et leur intersection."""
+    x_min_v = min(box_gt[0], box_pred[0]) - 15
+    y_min_v = min(box_gt[1], box_pred[1]) - 15
+    x_max_v = max(box_gt[2], box_pred[2]) + 15
+    y_max_v = max(box_gt[3], box_pred[3]) + 15
 
-    # Fond blanc
     ax.set_facecolor("#f8f8f8")
 
     # Zone d'intersection
-    x_inter1 = max(box_gt[0], box_pred[0])
-    y_inter1 = max(box_gt[1], box_pred[1])
-    x_inter2 = min(box_gt[2], box_pred[2])
-    y_inter2 = min(box_gt[3], box_pred[3])
+    xi1 = max(box_gt[0], box_pred[0])
+    yi1 = max(box_gt[1], box_pred[1])
+    xi2 = min(box_gt[2], box_pred[2])
+    yi2 = min(box_gt[3], box_pred[3])
+    if xi2 > xi1 and yi2 > yi1:
+        ax.add_patch(patches.Rectangle((xi1, yi1), xi2-xi1, yi2-yi1,
+                     linewidth=0, facecolor="#9b59b6", alpha=0.45, label="Intersection"))
 
-    if x_inter2 > x_inter1 and y_inter2 > y_inter1:
-        rect_inter = patches.Rectangle(
-            (x_inter1, y_inter1),
-            x_inter2 - x_inter1, y_inter2 - y_inter1,
-            linewidth=0, facecolor="#9b59b6", alpha=0.5, label="Intersection"
-        )
-        ax.add_patch(rect_inter)
+    # Boite GT
+    ax.add_patch(patches.Rectangle((box_gt[0], box_gt[1]),
+                 box_gt[2]-box_gt[0], box_gt[3]-box_gt[1],
+                 linewidth=2.5, edgecolor="#27ae60", facecolor="none", label="Photo 1 (GT)"))
 
-    # Boîte Ground Truth (verte)
-    rect_gt = patches.Rectangle(
-        (box_gt[0], box_gt[1]),
-        box_gt[2] - box_gt[0], box_gt[3] - box_gt[1],
-        linewidth=2.5, edgecolor="#27ae60", facecolor="none", label="Ground Truth"
-    )
-    ax.add_patch(rect_gt)
+    # Boite predite
+    ax.add_patch(patches.Rectangle((box_pred[0], box_pred[1]),
+                 box_pred[2]-box_pred[0], box_pred[3]-box_pred[1],
+                 linewidth=2.5, edgecolor="#e67e22", facecolor="none", label="Photo 2 (pred)"))
 
-    # Boîte prédite (orange)
-    rect_p = patches.Rectangle(
-        (box_pred[0], box_pred[1]),
-        box_pred[2] - box_pred[0], box_pred[3] - box_pred[1],
-        linewidth=2.5, edgecolor="#e67e22", facecolor="none", label="Prediction"
-    )
-    ax.add_patch(rect_p)
-
-    ax.set_xlim(x_min_view, x_max_view)
-    ax.set_ylim(y_max_view, y_min_view)   # Axe Y inversé (convention image)
+    ax.set_xlim(x_min_v, x_max_v)
+    ax.set_ylim(y_max_v, y_min_v)
     ax.set_title(f"{titre}\nIoU = {score:.3f}", fontsize=11)
     ax.legend(loc="lower right", fontsize=8)
     ax.set_xlabel("x (pixels)")
@@ -144,126 +203,126 @@ def visualiser_iou(box_gt, box_pred, score, ax, titre=""):
     ax.grid(True, alpha=0.3)
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# 4. COURBE SHIFT VS IoU (exercice bonus du cours)
-# ═══════════════════════════════════════════════════════════════════════════
-# On décale progressivement la boîte prédite et on observe l'impact sur l'IoU
+# =============================================================================
+# 5. COURBE SHIFT vs IoU (exemple pedagogique avec images synthetiques)
+# =============================================================================
+def make_rect(shift=0):
+    img = np.zeros((200, 300, 3), dtype=np.uint8)
+    cv2.rectangle(img, (50+shift, 40), (250+shift, 160), (255, 255, 255), -1)
+    return img
 
-shifts     = list(range(0, 65, 5))
-iou_scores = []
+def bbox_synth(img_bgr):
+    _, b = cv2.threshold(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY), 127, 255, cv2.THRESH_BINARY)
+    pts = cv2.findNonZero(b)
+    if pts is None: return None
+    x, y, w, h = cv2.boundingRect(pts)
+    return (x, y, x+w, y+h)
 
-for s in shifts:
-    box_shifted = (box_gt[0] + s, box_gt[1], box_gt[2] + s, box_gt[3])
-    iou_scores.append(iou(box_shifted, box_gt))
-
-# Décalage à 0, 12, 30 et 50 pour les exemples visuels
-exemples = [(0, "Shift=0\n(parfait)"), (12, "Shift=12\n(léger)"),
-            (30, "Shift=30\n(moyen)"), (50, "Shift=50\n(fort)")]
+shifts_list = list(range(0, 65, 5))
+box_ref     = bbox_synth(make_rect(0))
+iou_shifts  = [iou(bbox_synth(make_rect(s)), box_ref) for s in shifts_list]
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# 5. FIGURE COMPLÈTE
-# ═══════════════════════════════════════════════════════════════════════════
+# =============================================================================
+# 6. FIGURE COMPLETE
+# =============================================================================
 fig = plt.figure(figsize=(22, 14))
-fig.suptitle("Section 7 — IoU (Intersection over Union)", fontsize=16, fontweight="bold")
+fig.suptitle("Section 7 - IoU : 2 vraies photos du meme chien", fontsize=16, fontweight="bold")
 
-# Ligne 1 : 4 exemples visuels de décalage
-for col, (shift, label) in enumerate(exemples):
-    ax = fig.add_subplot(2, 4, col + 1)
-    b_shifted = (box_gt[0] + shift, box_gt[1], box_gt[2] + shift, box_gt[3])
-    s = iou(b_shifted, box_gt)
-    couleur_titre = "#27ae60" if s >= 0.8 else "#e67e22" if s >= 0.5 else "#e74c3c"
-    visualiser_iou(box_gt, b_shifted, s, ax, titre=label)
-    ax.set_title(f"{label}\nIoU = {s:.3f}", fontsize=10, color=couleur_titre)
+# -- Panneau 1 : Photo 1 avec boite GT ----------------------------------------
+ax1 = fig.add_subplot(2, 4, 1)
+img1_draw = img1.copy()
+cv2.rectangle(img1_draw, (box_gt[0], box_gt[1]), (box_gt[2], box_gt[3]), (0, 255, 0), 4)
+ax1.imshow(cv2.cvtColor(img1_draw, cv2.COLOR_BGR2RGB))
+ax1.set_title(f"1. Photo 1 - Boite GT\n{os.path.basename(IMAGE_PATH1)}")
+ax1.axis("off")
 
-# Ligne 2 gauche-centre : courbe shift vs IoU
-ax_courbe = fig.add_subplot(2, 4, (5, 7))
-ax_courbe.plot(shifts, iou_scores, marker="o", linewidth=2.5,
-               color="steelblue", markersize=6, label="IoU")
-ax_courbe.axhline(0.8, color="#27ae60", linestyle="--", linewidth=1.5, label="Seuil 0.8 (excellent)")
-ax_courbe.axhline(0.5, color="#e67e22", linestyle="--", linewidth=1.5, label="Seuil 0.5 (acceptable)")
-ax_courbe.fill_between(shifts, iou_scores, alpha=0.15, color="steelblue")
-ax_courbe.set_title("Courbe : Décalage (shift) vs IoU", fontsize=12)
-ax_courbe.set_xlabel("Décalage en pixels")
-ax_courbe.set_ylabel("Score IoU")
-ax_courbe.set_xlim([0, 60])
-ax_courbe.set_ylim([0, 1.05])
-ax_courbe.legend(fontsize=9)
-ax_courbe.grid(True, alpha=0.3)
+# -- Panneau 2 : Photo 2 avec boite pred --------------------------------------
+ax2 = fig.add_subplot(2, 4, 2)
+img2_draw = img2.copy()
+cv2.rectangle(img2_draw, (box_pred[0], box_pred[1]), (box_pred[2], box_pred[3]), (255, 120, 0), 4)
+ax2.imshow(cv2.cvtColor(img2_draw, cv2.COLOR_BGR2RGB))
+ax2.set_title(f"2. Photo 2 - Boite pred\n{os.path.basename(IMAGE_PATH2)}")
+ax2.axis("off")
 
-# Annotate le point shift=12 (exemple du cours)
-idx_12 = shifts.index(10) if 10 in shifts else 2
-ax_courbe.annotate(f"shift=12\nIoU≈{iou((box_gt[0]+12, box_gt[1], box_gt[2]+12, box_gt[3]), box_gt):.2f}",
-                   xy=(12, iou((box_gt[0]+12, box_gt[1], box_gt[2]+12, box_gt[3]), box_gt)),
-                   xytext=(20, 0.75),
-                   arrowprops=dict(arrowstyle="->", color="gray"),
-                   fontsize=9, color="gray")
+# -- Panneau 3 : Visualisation IoU --------------------------------------------
+ax3 = fig.add_subplot(2, 4, 3)
+visualiser_iou(box_gt, box_pred, score, ax3, titre=f"3. Schema IoU\n(score = {score:.3f})")
 
-# Ligne 2 droite : tableau récapitulatif
-ax_table = fig.add_subplot(2, 4, 8)
-ax_table.axis("off")
-headers = ["Shift (px)", "IoU", "Qualité"]
-rows = []
-for s in [0, 10, 20, 30, 40, 50, 60]:
-    b = (box_gt[0] + s, box_gt[1], box_gt[2] + s, box_gt[3])
-    v = iou(b, box_gt)
-    q = "Excellent" if v >= 0.8 else "Bon" if v >= 0.5 else "Faible" if v > 0 else "Nul"
-    rows.append([str(s), f"{v:.3f}", q])
+# -- Panneau 4 : superposition des 2 boites -----------------------------------
+ax4 = fig.add_subplot(2, 4, 4)
+overlay = cv2.addWeighted(img1, 0.5, img2, 0.5, 0)
+cv2.rectangle(overlay, (box_gt[0], box_gt[1]),   (box_gt[2],   box_gt[3]),   (0, 255, 0),   3)
+cv2.rectangle(overlay, (box_pred[0], box_pred[1]), (box_pred[2], box_pred[3]), (255, 120, 0), 3)
+ax4.imshow(cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB))
+ax4.set_title(f"4. Superposition\nVert=GT  Orange=Pred")
+ax4.axis("off")
 
-table = ax_table.table(
-    cellText=rows, colLabels=headers,
-    loc="center", cellLoc="center"
-)
+# -- Panneau 5-7 : courbe shift vs IoU (pedagogique) -------------------------
+ax5 = fig.add_subplot(2, 4, (5, 7))
+ax5.plot(shifts_list, iou_shifts, marker="o", linewidth=2.5, color="steelblue", label="IoU")
+ax5.axhline(0.8, color="#27ae60", linestyle="--", linewidth=1.5, label="Seuil 0.8 (excellent)")
+ax5.axhline(0.5, color="#e67e22", linestyle="--", linewidth=1.5, label="Seuil 0.5 (acceptable)")
+ax5.fill_between(shifts_list, iou_shifts, alpha=0.15, color="steelblue")
+ax5.set_title("5. Courbe : Decalage (shift) vs IoU\n(illustration pedagogique - rectangle synthetique)", fontsize=11)
+ax5.set_xlabel("Decalage en pixels")
+ax5.set_ylabel("Score IoU")
+ax5.set_xlim([0, 60])
+ax5.set_ylim([0, 1.05])
+ax5.legend(fontsize=9)
+ax5.grid(True, alpha=0.3)
+
+# -- Panneau 8 : tableau recapitulatif ----------------------------------------
+ax8 = fig.add_subplot(2, 4, 8)
+ax8.axis("off")
+headers = ["Photo", "Boite (x1,y1,x2,y2)", "Aire px2"]
+rows = [
+    ["GT (photo 1)",   str(box_gt),   str(aire_gt)],
+    ["Pred (photo 2)", str(box_pred), str(aire_pred)],
+    ["IoU",            f"{score:.3f}", niveau],
+]
+table = ax8.table(cellText=rows, colLabels=headers, loc="center", cellLoc="center")
 table.auto_set_font_size(False)
-table.set_fontsize(10)
-table.scale(1.2, 1.6)
-
-# Colorier les lignes selon la qualité
+table.set_fontsize(8)
+table.scale(1.1, 2.0)
 for (row, col), cell in table.get_celld().items():
     if row == 0:
         cell.set_facecolor("#2c3e50")
         cell.set_text_props(color="white", fontweight="bold")
-    elif col == 2 and row > 0:
-        val = rows[row - 1][1]
-        v = float(val)
-        if v >= 0.8:
-            cell.set_facecolor("#d5f5e3")
-        elif v >= 0.5:
-            cell.set_facecolor("#fdebd0")
-        else:
-            cell.set_facecolor("#fadbd8")
+    elif row == 3:
+        cell.set_facecolor("#d5f5e3" if score >= 0.5 else "#fadbd8")
 
-ax_table.set_title("Tableau shift vs IoU", fontsize=10, fontweight="bold")
+ax8.set_title("Resume", fontweight="bold")
 
 plt.tight_layout()
 fig_path = os.path.join(OUTPUT_DIR, "7_1_iou.png")
 plt.savefig(fig_path, dpi=130)
 plt.close()
-print(f"Figure sauvegardee : {fig_path}")
+print(f"\nFigure sauvegardee : {fig_path}")
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# 6. EXPORT JSON (métriques — format lab du cours)
-# ═══════════════════════════════════════════════════════════════════════════
+# =============================================================================
+# 7. EXPORT JSON
+# =============================================================================
 metriques = {
-    "iou_score":  round(score, 3),
-    "bbox_gt":    list(box_gt),
-    "bbox_pred":  list(box_pred),
-    "seuil_bon":  0.5,
-    "seuil_excellent": 0.8,
-    "interpretation": niveau,
-    "courbe_shift_iou": {str(s): round(iou((box_gt[0]+s, box_gt[1], box_gt[2]+s, box_gt[3]), box_gt), 3)
-                         for s in shifts},
-    "figure_path": fig_path
+    "images": {
+        "photo1": os.path.basename(IMAGE_PATH1),
+        "photo2": os.path.basename(IMAGE_PATH2),
+    },
+    "iou_score":       round(score, 3),
+    "bbox_gt":         list(box_gt),
+    "bbox_pred":       list(box_pred),
+    "aire_gt":         aire_gt,
+    "aire_pred":       aire_pred,
+    "interpretation":  niveau,
+    "courbe_shift_iou": {str(s): round(iou(bbox_synth(make_rect(s)), box_ref), 3) for s in shifts_list},
+    "figure_path":     fig_path,
 }
-
 json_path = os.path.join(OUTPUT_DIR, "7_1_iou_metrics.json")
 with open(json_path, "w", encoding="utf-8") as f:
     json.dump(metriques, f, indent=2, ensure_ascii=False)
 
 print(f"Metriques JSON  : {json_path}")
-print(f"\n--- Résumé ---")
-print(f"IoU (shift=12)  : {score:.3f}  → {niveau}")
-print(f"IoU (shift=0)   : 1.000  → Superposition parfaite")
-print(f"IoU (shift=30)  : {iou((box_gt[0]+30,box_gt[1],box_gt[2]+30,box_gt[3]),box_gt):.3f}  → seuil 0.5 proche")
+print(f"\n--- Resume ---")
+print(f"IoU photos reelles : {score:.3f}  -> {niveau}")
 
