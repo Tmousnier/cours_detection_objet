@@ -4,9 +4,19 @@
 ====================================================
 cv2.resize permet de changer la taille d'une image.
 On peut spécifier une taille absolue ou un facteur d'échelle.
+
+Interpolations :
+  - INTER_AREA   : recommandée pour la réduction (évite le crénelage)
+  - INTER_CUBIC  : recommandée pour l'agrandissement (plus fluide)
+  - INTER_LINEAR : par défaut, bon compromis vitesse / qualité
+
+ATTENTION : cv2.resize prend (largeur, hauteur),
+            l'inverse de la forme NumPy (hauteur, largeur).
 """
 
 import cv2
+import matplotlib
+matplotlib.use("Agg")   # Mode sans affichage (serveur / SSH)
 import matplotlib.pyplot as plt
 
 # ── 1. Lecture de l'image ───────────────────────────────────────────────────
@@ -18,33 +28,35 @@ if img is None:
 hauteur, largeur = img.shape[:2]
 print(f"Taille originale : {largeur}x{hauteur} px")
 
-# ── 2. Redimensionnement à taille fixe ─────────────────────────────────────
-img_fixe = cv2.resize(img, (300, 300))
-print("Taille fixe :", img_fixe.shape)
+# ── 2. Redimensionnement à taille fixe (INTER_AREA pour réduire) ────────────
+redimensionnee = cv2.resize(img, (128, 64), interpolation=cv2.INTER_AREA)
+print("Taille 128x64 :", redimensionnee.shape)
 
-# ── 3. Redimensionnement par facteur d'échelle ──────────────────────────────
-facteur = 0.5
-img_moitie = cv2.resize(img, None, fx=facteur, fy=facteur)
-print("Taille x0.5 :", img_moitie.shape)
+# ── 3. Redimensionnement par facteur x2 (INTER_CUBIC pour agrandir) ─────────
+x2 = cv2.resize(img, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+print("Taille x2 :", x2.shape)
 
-# ── 4. Interpolation (important pour agrandir une image) ────────────────────
-# INTER_LINEAR  : interpolation bilinéaire (défaut, bon équilibre)
-# INTER_CUBIC   : bicubique (meilleure qualité, plus lent)
-# INTER_NEAREST : plus proche voisin (rapide, pixelisé)
-img_grand = cv2.resize(img, (largeur * 2, hauteur * 2), interpolation=cv2.INTER_CUBIC)
-print("Taille x2 (cubic) :", img_grand.shape)
+# ── 4. Redimensionnement par facteur x0.5 ───────────────────────────────────
+moitie = cv2.resize(img, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
+print("Taille x0.5 :", moitie.shape)
 
 # ── 5. Affichage comparatif ─────────────────────────────────────────────────
-images = [img, img_fixe, img_moitie]
-titres = ["Originale", "Fixe 300x300", "x0.5"]
+images = [img, redimensionnee, moitie]
+titres  = [
+    f"Originale\n{largeur}x{hauteur}",
+    f"Réduite 128x64\n(INTER_AREA)",
+    f"x0.5\n(INTER_AREA)",
+]
 
 fig, axes = plt.subplots(1, 3, figsize=(14, 5))
 for ax, image, titre in zip(axes, images, titres):
     ax.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-    ax.set_title(f"{titre}\n{image.shape[1]}x{image.shape[0]}")
+    ax.set_title(titre)
     ax.axis("off")
 
-plt.suptitle("Redimensionnement d'images", fontsize=14)
+plt.suptitle("Section 6.3 — Redimensionnement d'images", fontsize=14)
 plt.tight_layout()
-plt.show()
+plt.savefig("../outputs/6_3_redimensionnement.png", dpi=130)
+plt.close()
+print("Figure sauvegardée : outputs/6_3_redimensionnement.png")
 
