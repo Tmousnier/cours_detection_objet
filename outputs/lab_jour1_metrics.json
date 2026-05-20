@@ -1,0 +1,29 @@
+{
+  "iou_score": 0.887,
+  "bbox_gt": [
+    50,
+    40,
+    251,
+    161
+  ],
+  "bbox_pred": [
+    62,
+    40,
+    263,
+    161
+  ],
+  "hog_dimension": 3780,
+  "hog_shifted_l2": 5.32,
+  "hog_different_l2": 9.3,
+  "sift_kp_gt": 4,
+  "sift_kp_pred": 7,
+  "sift_kp_other": 8,
+  "sift_good_matches_similar": 3,
+  "sift_good_matches_different": 0,
+  "checkpoints": {
+    "A_iou_valide": true,
+    "B_hog_separation": true,
+    "C_sift_separation": true
+  },
+  "figure_path": "C:\\Users\\mousn\\PycharmProjects\\Cours_dectection_objet\\outputs\\lab_jour1.png"
+}
