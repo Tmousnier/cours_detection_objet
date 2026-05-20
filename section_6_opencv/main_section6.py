@@ -4,13 +4,27 @@
 ====================================================
 Ce script exécute toutes les étapes de la section 6
 dans l'ordre : lecture → gris → resize → histogramme → seuillage
+
+La figure est sauvegardée dans outputs/main_section6.png
+(matplotlib.use("Agg") évite les problèmes d'affichage en SSH / serveur)
 """
 
+import os
 import cv2
+import matplotlib
+matplotlib.use("Agg")   # Pas d'affichage graphique → sauvegarde fichier
 import matplotlib.pyplot as plt
 import numpy as np
 
-IMAGE_PATH = "../Image/Harry_bebe.jpeg"
+# ── Chemins dynamiques (fonctionne peu importe le répertoire de lancement) ──
+BASE_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+IMAGE_PATH  = os.path.join(BASE_DIR, "Image", "Harry_bebe.jpeg")
+OUTPUT_DIR  = os.path.join(BASE_DIR, "outputs")
+OUTPUT_PATH = os.path.join(OUTPUT_DIR, "main_section6.png")
+
+# Créer le dossier outputs/ s'il n'existe pas
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
 
 # ───────────────────────────────────────────────────────────────────────────
 # 1. Lecture
@@ -80,6 +94,25 @@ ax5.imshow(thresh, cmap="gray")
 ax5.set_title(f"5. Seuillage Otsu ({seuil_otsu:.0f})")
 ax5.axis("off")
 
+# ── Ajout : contours + boîtes ────────────────────────────────────────────────
+contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+img_boites = img.copy()
+for contour in contours:
+    x, y, w, h = cv2.boundingRect(contour)
+    if w * h > 500:   # Filtrer les très petits contours
+        cv2.rectangle(img_boites, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+ax6 = fig.add_subplot(2, 3, 6)
+ax6.imshow(cv2.cvtColor(img_boites, cv2.COLOR_BGR2RGB))
+ax6.set_title(f"6. Contours ({len(contours)} détectés)")
+ax6.axis("off")
+
 plt.tight_layout()
-plt.show()
+
+# ── Sauvegarde ───────────────────────────────────────────────────────────────
+output_path = OUTPUT_PATH
+plt.savefig(output_path, dpi=130)
+plt.close()
+print(f"[6] Contours détectés : {len(contours)}")
+print(f"\n✅ Figure sauvegardée : {output_path}")
 
