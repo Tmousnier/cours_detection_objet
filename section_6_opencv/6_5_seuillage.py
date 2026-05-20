@@ -6,14 +6,23 @@ Le seuillage binarise une image : chaque pixel devient
 blanc (255) ou noir (0) selon un seuil défini.
 """
 
+import os
 import cv2
+import matplotlib
+matplotlib.use("Agg")   # Mode sans affichage (serveur / SSH)
 import matplotlib.pyplot as plt
 
+# ── Chemins dynamiques ──────────────────────────────────────────────────────
+BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+IMAGE_PATH = os.path.join(BASE_DIR, "Image", "Harry_bebe.jpeg")
+OUTPUT_DIR = os.path.join(BASE_DIR, "outputs")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
 # ── 1. Lecture et conversion en niveaux de gris ─────────────────────────────
-img = cv2.imread("../Image/Harry_bebe.jpeg")
+img = cv2.imread(IMAGE_PATH)
 
 if img is None:
-    raise FileNotFoundError("Image non trouvée. Vérifiez le chemin.")
+    raise FileNotFoundError(f"Image non trouvée : {IMAGE_PATH}")
 
 gris = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
@@ -57,7 +66,7 @@ titres = [
     "Niveaux de gris",
     f"Binaire (seuil={seuil})",
     "Binaire inversé",
-    f"Otsu (seuil≈{seuil_otsu:.0f})",
+    f"Otsu (seuil={seuil_otsu:.0f})",
     "Adaptatif Mean",
     "Adaptatif Gaussien"
 ]
@@ -68,7 +77,10 @@ for ax, image, titre in zip(axes.ravel(), images, titres):
     ax.set_title(titre)
     ax.axis("off")
 
-plt.suptitle("Comparaison des méthodes de seuillage", fontsize=14)
+plt.suptitle("Comparaison des methodes de seuillage", fontsize=14)
 plt.tight_layout()
-plt.show()
 
+output_path = os.path.join(OUTPUT_DIR, "6_5_seuillage.png")
+plt.savefig(output_path, dpi=130)
+plt.close()
+print(f"Figure sauvegardee : {output_path}")
