@@ -44,6 +44,15 @@ canny = cv2.Canny(gris, 100, 200)
 n_pixels_contour = cv2.countNonZero(canny)
 print(f"Pixels de contour (Canny) : {n_pixels_contour}")
 
+# ── 3b. findContours basique sur le seuillage → plein de boîtes ─────────────
+contours_bruts, _ = cv2.findContours(binaire, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+img_tous_rectangles = img.copy()
+for contour in contours_bruts:
+    x, y, w, h = cv2.boundingRect(contour)
+    if w * h > 500:   # filtrer les micro-contours
+        cv2.rectangle(img_tous_rectangles, (x, y), (x + w, y + h), (0, 255, 0), 1)
+print(f"Boites brutes (findContours) : {len(contours_bruts)}")
+
 # ── 4. GrabCut — boîte englobante précise autour de l'animal ────────────────
 # GrabCut sépare le sujet du fond en utilisant les couleurs (plus fiable
 # que le seuillage simple sur des images à fond complexe).
@@ -99,7 +108,7 @@ fig, axes = plt.subplots(2, 4, figsize=(24, 12))
 fig.suptitle("Section 6.6 — Contours et extraction de boîtes",
              fontsize=15, fontweight="bold")
 
-# ── Ligne 1 : étapes de base ─────────────────────────────────────────────────
+# ── Ligne 1 ──────────────────────────────────────────────────────────────────
 axes[0][0].imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
 axes[0][0].set_title("1. Image originale")
 axes[0][0].axis("off")
@@ -112,24 +121,25 @@ axes[0][2].imshow(canny, cmap="gray")
 axes[0][2].set_title(f"3. Contours Canny\n({n_pixels_contour} pixels de bord)")
 axes[0][2].axis("off")
 
-axes[0][3].imshow(masque_fg, cmap="gray")
-axes[0][3].set_title("4. Masque GrabCut\n(blanc = avant-plan)")
+axes[0][3].imshow(cv2.cvtColor(img_tous_rectangles, cv2.COLOR_BGR2RGB))
+axes[0][3].set_title(f"4. Tous les rectangles\n(findContours brut - {len(contours_bruts)} boites)")
 axes[0][3].axis("off")
 
-# ── Ligne 2 : résultats GrabCut ──────────────────────────────────────────────
-axes[1][0].imshow(cv2.cvtColor(masque_bgr, cv2.COLOR_BGR2RGB))
-axes[1][0].set_title(f"5. Contours sur masque\n({len(contours_gc)} régions détectées)")
+# ── Ligne 2 ──────────────────────────────────────────────────────────────────
+axes[1][0].imshow(masque_fg, cmap="gray")
+axes[1][0].set_title("5. Masque GrabCut\n(blanc = avant-plan)")
 axes[1][0].axis("off")
 
-axes[1][1].imshow(cv2.cvtColor(img_regions, cv2.COLOR_BGR2RGB))
-axes[1][1].set_title(f"6. Les 5 plus grandes régions\n(boîtes individuelles)")
+axes[1][1].imshow(cv2.cvtColor(masque_bgr, cv2.COLOR_BGR2RGB))
+axes[1][1].set_title(f"6. Contours sur masque\n({len(contours_gc)} regions detectees)")
 axes[1][1].axis("off")
 
-axes[1][2].imshow(cv2.cvtColor(img_boites, cv2.COLOR_BGR2RGB))
-axes[1][2].set_title("7. Boite englobante finale [VERT]\n(fusion des 5 regions)")
+axes[1][2].imshow(cv2.cvtColor(img_regions, cv2.COLOR_BGR2RGB))
+axes[1][2].set_title("7. Les 5 plus grandes regions\n(boites individuelles)")
 axes[1][2].axis("off")
 
-# Dernière case vide
+axes[1][3].imshow(cv2.cvtColor(img_boites, cv2.COLOR_BGR2RGB))
+axes[1][3].set_title("8. Boite englobante finale\n(fusion des 5 regions)")
 axes[1][3].axis("off")
 
 plt.tight_layout()
