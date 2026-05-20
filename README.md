@@ -1,0 +1,1 @@
+# cours_detection_objet
