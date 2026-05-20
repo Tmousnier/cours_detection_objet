@@ -193,3 +193,39 @@ plt.savefig(output_path, dpi=130)
 plt.close()
 print(f"\nFigure sauvegardee : {output_path}")
 
+# =============================================================================
+# 6. CONCLUSION / INTERPRETATION
+# =============================================================================
+ratio = dist_different / dist_similar if dist_similar > 0 else float("inf")
+
+print("\n" + "=" * 55)
+print("  CONCLUSION - Ce que HOG nous apprend")
+print("=" * 55)
+print(f"""
+  Distances L2 entre descripteurs HOG (3780 dimensions) :
+  --------------------------------------------------------
+  Photo 1 <-> Photo 2 (meme chien)  : {dist_similar:.2f}   [FAIBLE]
+  Photo 1 <-> Cercle  (different)   : {dist_different:.2f}  [ELEVE]
+  --------------------------------------------------------
+  Ratio diferent / similaire        : x{ratio:.1f}
+
+  Ce qu'on en deduit :
+  1) HOG encode la STRUCTURE DES CONTOURS d'une image.
+     Les 2 photos du chien ont des gradients similaires
+     (fourrure, silhouette, oreilles) -> distance faible.
+
+  2) Un cercle synthetique a une structure completement
+     differente -> distance {ratio:.1f}x plus grande.
+
+  3) HOG peut donc distinguer des formes differentes,
+     mais il N'EST PAS invariant au changement d'echelle
+     ni a la rotation (contrairement a SIFT).
+
+  4) Utilisation classique : detecter des pietons (forme
+     verticale caracteristique) avec un classifieur SVM.
+
+  Checkpoint : dist_different ({dist_different:.2f}) > dist_similar ({dist_similar:.2f}) ?
+  -> {"OUI - HOG separe correctement les sujets" if dist_different > dist_similar else "NON - probleme de separation"}
+""")
+
+
