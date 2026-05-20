@@ -1,4 +1,8 @@
 {
+  "images": {
+    "photo1": "Harry_bebe.jpeg",
+    "photo2": "Harry_bebe (1).png"
+  },
   "iou_score": 0.887,
   "bbox_gt": [
     50,
@@ -13,12 +17,12 @@
     161
   ],
   "hog_dimension": 3780,
-  "hog_shifted_l2": 5.32,
-  "hog_different_l2": 9.3,
-  "sift_kp_gt": 4,
-  "sift_kp_pred": 7,
-  "sift_kp_other": 8,
-  "sift_good_matches_similar": 3,
+  "hog_similar_l2": 1.79,
+  "hog_different_l2": 10.54,
+  "sift_kp_photo1": 10134,
+  "sift_kp_photo2": 10158,
+  "sift_kp_cercle": 8,
+  "sift_good_matches_similar": 9328,
   "sift_good_matches_different": 0,
   "checkpoints": {
     "A_iou_valide": true,
