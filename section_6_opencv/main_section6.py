@@ -94,25 +94,51 @@ ax5.imshow(thresh, cmap="gray")
 ax5.set_title(f"5. Seuillage Otsu ({seuil_otsu:.0f})")
 ax5.axis("off")
 
-# ── Ajout : contours + boîtes ────────────────────────────────────────────────
-contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+# ── Contours + boîte englobante autour de l'animal (GrabCut) ────────────────
+# GrabCut est conçu pour extraire le sujet du fond.
+# On lui donne un rectangle légèrement en retrait des bords → il segmente automatiquement
+
+h_img, w_img = img.shape[:2]
+margin_x = int(w_img * 0.04)
+margin_y = int(h_img * 0.04)
+
+# Rectangle initial = zone probable de l'avant-plan (x, y, largeur, hauteur)
+rect_gc = (margin_x, margin_y, w_img - 2 * margin_x, h_img - 2 * margin_y)
+
+mask_gc   = np.zeros((h_img, w_img), np.uint8)
+bgd_model = np.zeros((1, 65), np.float64)
+fgd_model = np.zeros((1, 65), np.float64)
+
+# 5 itérations GrabCut
+cv2.grabCut(img, mask_gc, rect_gc, bgd_model, fgd_model, 5, cv2.GC_INIT_WITH_RECT)
+
+# Masque binaire : 0/2 = fond, 1/3 = avant-plan
+masque_fg = np.where((mask_gc == 2) | (mask_gc == 0), 0, 255).astype(np.uint8)
+
+# Trouver les contours sur le masque GrabCut
+contours_gc, _ = cv2.findContours(masque_fg, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+contours_significatifs = sorted(contours_gc, key=cv2.contourArea, reverse=True)[:5]
+
 img_boites = img.copy()
-for contour in contours:
-    x, y, w, h = cv2.boundingRect(contour)
-    if w * h > 500:   # Filtrer les très petits contours
-        cv2.rectangle(img_boites, (x, y), (x + w, y + h), (0, 255, 0), 2)
+if contours_significatifs:
+    # Boîte englobante globale sur les 5 plus grandes régions
+    x_min = min(cv2.boundingRect(c)[0] for c in contours_significatifs)
+    y_min = min(cv2.boundingRect(c)[1] for c in contours_significatifs)
+    x_max = max(cv2.boundingRect(c)[0] + cv2.boundingRect(c)[2] for c in contours_significatifs)
+    y_max = max(cv2.boundingRect(c)[1] + cv2.boundingRect(c)[3] for c in contours_significatifs)
+
+    cv2.rectangle(img_boites, (x_min, y_min), (x_max, y_max), (0, 255, 0), 4)
+    print(f"[6] Boîte englobante (GrabCut) : x={x_min}, y={y_min}, w={x_max-x_min}, h={y_max-y_min}")
 
 ax6 = fig.add_subplot(2, 3, 6)
 ax6.imshow(cv2.cvtColor(img_boites, cv2.COLOR_BGR2RGB))
-ax6.set_title(f"6. Contours ({len(contours)} détectés)")
+ax6.set_title(f"6. Boîte englobante\n({len(contours_significatifs)} régions fusionnées)")
 ax6.axis("off")
 
 plt.tight_layout()
 
 # ── Sauvegarde ───────────────────────────────────────────────────────────────
-output_path = OUTPUT_PATH
-plt.savefig(output_path, dpi=130)
+plt.savefig(OUTPUT_PATH, dpi=130)
 plt.close()
-print(f"[6] Contours détectés : {len(contours)}")
-print(f"\n✅ Figure sauvegardée : {output_path}")
+print(f"\n✅ Figure sauvegardée : {OUTPUT_PATH}")
 
