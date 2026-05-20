@@ -48,9 +48,16 @@ img_resize = cv2.resize(img, (300, 300))
 print(f"[3] Redimensionné   — forme : {img_resize.shape}")
 
 # ───────────────────────────────────────────────────────────────────────────
-# 4. Histogramme
+# 4. Histogramme niveaux de gris + courbes R, G, B
 # ───────────────────────────────────────────────────────────────────────────
 hist = cv2.calcHist([gris], [0], None, [256], [0, 256])
+
+# OpenCV stocke en BGR → index 2=R, 1=G, 0=B
+canaux_rgb = [
+    {"nom": "Rouge (R)", "index": 2, "color": "red",   "fill": "#ffaaaa"},
+    {"nom": "Vert  (G)", "index": 1, "color": "green", "fill": "#aaffaa"},
+    {"nom": "Bleu  (B)", "index": 0, "color": "blue",  "fill": "#aaaaff"},
+]
 
 # ───────────────────────────────────────────────────────────────────────────
 # 5. Seuillage (Otsu)
@@ -80,14 +87,27 @@ ax3.set_title("3. Redimensionné (300×300)")
 ax3.axis("off")
 
 ax4 = fig.add_subplot(2, 3, 4)
-ax4.plot(hist, color="black")
-ax4.fill_between(np.arange(256), hist.flatten(), alpha=0.3, color="gray")
-ax4.axvline(seuil_otsu, color="red", linestyle="--", label=f"Otsu={seuil_otsu:.0f}")
-ax4.set_title("4. Histogramme")
-ax4.set_xlabel("Intensité")
+x = np.arange(256)
+
+# Courbe niveaux de gris (fond gris)
+ax4.plot(x, hist.flatten(), color="black", linewidth=1.2, alpha=0.5, label="Gris")
+ax4.fill_between(x, hist.flatten(), alpha=0.15, color="gray")
+
+# Courbes R, G, B
+for c in canaux_rgb:
+    h = cv2.calcHist([img], [c["index"]], None, [256], [0, 256]).flatten()
+    ax4.plot(x, h, color=c["color"], linewidth=1.8, label=c["nom"], alpha=0.9)
+    ax4.fill_between(x, h, color=c["fill"], alpha=0.20)
+
+# Ligne verticale Otsu
+ax4.axvline(seuil_otsu, color="red", linestyle="--", linewidth=1.4, label=f"Otsu={seuil_otsu:.0f}")
+
+ax4.set_title("4. Histogramme R – G – B")
+ax4.set_xlabel("Intensité (0–255)")
 ax4.set_ylabel("Pixels")
-ax4.legend()
-ax4.set_xlim([0, 256])
+ax4.set_xlim([0, 255])
+ax4.legend(fontsize=7)
+ax4.grid(True, alpha=0.3)
 
 ax5 = fig.add_subplot(2, 3, 5)
 ax5.imshow(thresh, cmap="gray")
