@@ -15,7 +15,6 @@ section_6_opencv/
 ├── 6_4_histogramme.py           # cv2.calcHist + cv2.equalizeHist
 ├── 6_5_seuillage.py             # seuillage global, Otsu, adaptatif
 ├── 6_6_contours_boites.py       # cv2.findContours, Canny, boundingRect
-├── 6_7_exemple_complet.py       # pipeline complet (image synthétique)
 └── README.md                    # cette documentation
 ```
 
@@ -24,8 +23,7 @@ Les figures générées sont sauvegardées dans :
 outputs/
 ├── 6_3_redimensionnement.png
 ├── 6_4_histogramme.png
-├── 6_6_contours_boites.png
-└── 6_7_pipeline_complet.png
+└── 6_6_contours_boites.png
 ```
 
 ---
@@ -40,7 +38,6 @@ outputs/
 | `6_4` | 6.4 | `cv2.calcHist`, `cv2.equalizeHist` | Histogramme + amélioration du contraste |
 | `6_5` | 6.5 | `cv2.threshold`, `adaptiveThreshold` | Seuillage fixe, Otsu, adaptatif |
 | `6_6` | 6.6 | `cv2.findContours`, `cv2.Canny`, `cv2.boundingRect` | Contours → boîtes candidates |
-| `6_7` | 6.7 | pipeline complet | Image synthétique → boîte détectée |
 
 ---
 
@@ -53,9 +50,6 @@ source .venv/bin/activate     # Linux / Mac
 
 # Exemple : contours et boîtes
 python section_6_opencv/6_6_contours_boites.py
-
-# Pipeline complet
-python section_6_opencv/6_7_exemple_complet.py
 ```
 
 > Les scripts utilisent `matplotlib.use("Agg")` et `plt.savefig()` :  
