@@ -54,9 +54,9 @@ for contour in contours_bruts:
 print(f"Boites brutes (findContours) : {len(contours_bruts)}")
 
 # ── 4. GrabCut — boîte englobante précise autour de l'animal ────────────────
-# OPTIMISATION VITESSE :
+# OPTIMISATION Vitesse :
 #   1) On réduit l'image à 25% pour GrabCut  → ~16x moins de pixels à traiter
-#   2) On réduit les itérations de 5 → 3      → ~40% plus rapide
+#   2) On réduit les itérations de 5 → 3      → ~40% plus rapides
 #   3) On remet les coordonnées à l'échelle originale pour l'affichage
 
 SCALE = 0.25   # ← ajuster entre 0.20 et 0.50 selon qualité/vitesse souhaitée
@@ -78,11 +78,11 @@ cv2.grabCut(img_small, mask_gc, rect_gc, bgd_model, fgd_model, ITER, cv2.GC_INIT
 # Masque binaire sur l'image réduite
 masque_small = np.where((mask_gc == 2) | (mask_gc == 0), 0, 255).astype(np.uint8)
 
-# Reprojeter le masque à la taille originale
+# Reprojected le masque à la taille originale
 h_img, w_img = img.shape[:2]
 masque_fg = cv2.resize(masque_small, (w_img, h_img), interpolation=cv2.INTER_NEAREST)
 
-# Trouver les contours sur le masque reprojeté
+# Trouver les contours sur le masque reprojected
 contours_gc, _ = cv2.findContours(masque_fg, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 print(f"Nombre de regions GrabCut : {len(contours_gc)}")
 
